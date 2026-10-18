@@ -1,0 +1,36 @@
+# the website is not part of this repository — only the API (the logic) is published
+site/
+/tools/
+*.html
+!api/test/fixtures/campaign.html
+
+# secrets and local state — never commit
+api/.env
+.env
+*.env
+*secrets*
+api/data/
+api/data-*/
+*.db
+*.db-wal
+*.db-shm
+
+# dependencies and logs
+node_modules/
+*.log
+
+# the teaser video working files and brand originals
+motion/
+brand/
+*.mp4
+*.wav
+*.mp3
+*.png
+*.jpg
+*.webp
+
+# editor / os
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
