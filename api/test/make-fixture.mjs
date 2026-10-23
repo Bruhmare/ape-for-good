@@ -1,0 +1,35 @@
+// Builds test/fixtures/campaign.html: a GoFundMe-shaped page for the parser tests with made-up content.
+// Only the page structure the parser reads is kept (the __NEXT_DATA__ Apollo state); no real fundraiser,
+// organizer, donor or photo appears in it. Run once: node test/make-fixture.mjs
+import fs from 'node:fs';
+const state = {
+  ROOT_QUERY: { __typename: 'Query', 'fundraiser:{"slug":"relief-fund-test"}': { __ref: 'Fundraiser:1001' } },
+  'User:5001': { __typename: 'User', id: '5001', firstName: 'Test', lastName: 'Organizer', profileUrl: '' },
+  'Photo:7001': { __typename: 'Photo', id: '7001', url: 'https://example.invalid/photo-7001.jpg' },
+  'Fundraiser:1001': {
+    __typename: 'Fundraiser', id: '1001', fundId: '1001', slug: 'relief-fund-test', defaultSlug: 'relief-fund-test',
+    title: 'Relief fund test — Chocó rebuild',
+    'description({"excerpt":false})': '<div>Chocó Needs Us Today\n</div>\n<div><br />\n</div>\n<div>This is a test story used by the parser tests. It stands in for a fundraiser story and contains no real people.\n</div>',
+    'description({"excerpt":true})': '<div>Chocó Needs Us Today</div>',
+    storySlideSummary: 'A test fundraiser story for the parser.',
+    currentAmount: { __typename: 'Money', amount: 151220, currencyCode: 'USD' },
+    goalAmount: { __typename: 'Money', amount: 200000, currencyCode: 'USD' },
+    userDefinedGoalAmount: { __typename: 'Money', amount: 200000, currencyCode: 'USD' },
+    donationCount: 2382, heartCount: 10, categoryId: '2', charityOrganized: false,
+    fundraiserImageUrl: 'https://example.invalid/photo-7001.jpg',
+    fundraiserPhoto: { __typename: 'FundraiserPhoto', url: 'https://example.invalid/photo-7001.jpg', scaled: { __typename: 'FundraiserPhotoScaled', fourByThree1200: 'https://example.invalid/photo-7001-1200x900.jpg' } },
+    galleryImages: { __typename: 'GalleryImagesConnection', edges: [{ __typename: 'GalleryImagesEdge', node: { __ref: 'Photo:7001' } }] },
+    location: { __typename: 'Location', city: 'Testville', countryCode: 'US', postalCode: '', statePrefix: 'NJ' },
+    organizer: { __ref: 'User:5001' },
+    createdAt: '2026-08-10T14:30:15.000-05:00', publishedAt: '2026-08-10T14:40:57.000-05:00',
+    status: 'ACTIVE', state: 'ACTIVE', isPublished: true, deactivated: false, updateCount: 0,
+  },
+};
+const next = { props: { pageProps: { __APOLLO_STATE__: state, initialPropsFromServer: { countryCode: 'US' } } }, page: '/f/[campaignUrl]/[[...fundraiserPageParams]]' };
+const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Relief fund test</title></head><body>
+<div id="__next"><main><h1>Relief fund test — Chocó rebuild</h1></main></div>
+<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(next)}</script>
+</body></html>
+`;
+fs.writeFileSync(new URL('./fixtures/campaign.html', import.meta.url), html);
+console.log('fixture written', html.length, 'bytes');
