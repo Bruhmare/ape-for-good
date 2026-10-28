@@ -65,7 +65,8 @@ export async function checkVerification({ slug, wallet }) {
   return { ok: true, claim: claimToken(claim), campaign: publicCampaign(page), expiresAt: claim.verifiedAt + CONFIG.claimTtlMinutes * MIN, coin: coin ? publicCoin(coin) : null, escrow: coin && coin.mode === 'open' ? await escrow.escrowStatus(slug).catch(() => null) : null };
 }
 
-const claimToken = (claim) => `${claim.slug}.${claim.verifiedAt}.${crypto.createHmac('sha256', claimSecret()).update(`${claim.slug}|${claim.wallet}|${claim.verifiedAt}`).digest('hex')}`;
+/** The token a verified organizer holds: slug.verifiedAt.HMAC(CLAIM_SECRET, slug|wallet|verifiedAt). Exported for the tests. */
+export const claimToken = (claim) => `${claim.slug}.${claim.verifiedAt}.${crypto.createHmac('sha256', claimSecret()).update(`${claim.slug}|${claim.wallet}|${claim.verifiedAt}`).digest('hex')}`;
 
 /** The claim behind a token, or a 400. Exported for escrow claims and delisting. */
 export function verifiedClaim(token, owner) {

@@ -7,7 +7,8 @@
   "engines": { "node": "24.x" },
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test test/unit.test.js"
+    "test": "node --test --test-concurrency=1 test/unit.test.js test/money.test.js",
+    "verify": "node tools/verify.mjs"
   },
   "dependencies": {
     "@pump-fun/pump-sdk": "^2.0.0",
