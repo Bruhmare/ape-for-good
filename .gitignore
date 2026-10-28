@@ -20,7 +20,7 @@ node_modules/
 *.log
 
 # the teaser video working files and brand originals
-motion/
+motion*/
 brand/
 *.mp4
 *.wav
