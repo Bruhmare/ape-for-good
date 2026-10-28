@@ -21,13 +21,12 @@ read the rules instead of taking our word for them. The website is a static fron
 ## Where the money goes
 
 ```mermaid
-flowchart TB
-  L["Anyone launches the fundraiser's coin on pump.fun<br/>creator = the fundraiser's escrow wallet, fixed at launch"] --> T
-  T["Every trade"] -->|"creator fee"| V[("creator vault")]
-  V --> E["Escrow wallet, one per fundraiser"]
-  E --> S["One transaction: sweep everything to the organizer<br/>only after they prove the fundraiser is theirs"]
+flowchart LR
+  P["The coin on pump.fun:<br/>creator = the fundraiser's<br/>escrow wallet, fixed at launch"] --> E["Escrow wallet,<br/>one per fundraiser:<br/>the creator fee<br/>of every trade"]
+  O["The organizer proves<br/>the fundraiser is theirs"] --> S["One transaction:<br/>sweep everything<br/>to the organizer"]
+  E --> S
   S --> W["Organizer's wallet"]
-  S --> G["Public ledger, with the signature"]
+  S --> G["Public ledger,<br/>with the signature"]
 ```
 
 1. **Launch.** Anyone can launch a fundraiser's coin. [`prepareOpenLaunch`](api/src/launch.js#L173-L190) builds
