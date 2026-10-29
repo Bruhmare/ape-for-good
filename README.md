@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/mark.svg" alt="" width="88"></p>
+<p align="center"><img src="docs/logo.png" alt="Ape for Good" width="96"></p>
 <h1 align="center">Ape for Good</h1>
 <p align="center"><b>Any public GoFundMe fundraiser can have a coin. The fee from every trade goes to that fundraiser, and nobody else can touch it.</b></p>
 <p align="center">
