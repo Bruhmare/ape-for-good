@@ -4,6 +4,7 @@
 //   node tools/verify.mjs --all                   every live coin and every published payout
 //   node tools/verify.mjs <mint | fundraiser-slug> one coin: its creator on the pump.fun curve, its escrow, its payouts
 //   node tools/verify.mjs --mint <any pump mint>   just read who a pump.fun coin pays (no site record needed)
+//   node tools/verify.mjs --help                  print the usage line
 //
 // Options: --api <url> (default: the production API) · --rpc <url> (default: Solana's public mainnet RPC)
 // Exit code 0 when every check passes, 1 when any fails.
@@ -92,7 +93,10 @@ async function checkCoin(coin, ledger) {
   for (const l of mine) await checkPayout(l, expect);
 }
 
+const USAGE = 'usage: node tools/verify.mjs --all | <mint | fundraiser-slug> | --mint <mint>   [--api url] [--rpc url]';
+
 async function main() {
+  if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); return; }
   if (args.includes('--mint')) {
     const mint = opt('--mint');
     const c = await curveCreator(mint);
@@ -100,7 +104,7 @@ async function main() {
     console.log(`${mint}\n  creator (who pump.fun pays the creator fee to): ${c.creator}${c.complete ? '\n  graduated' : ''}`);
     return;
   }
-  const target = args.find((a) => !a.startsWith('--') && a !== API && a !== RPC);
+  const target = args.find((a) => !a.startsWith('-') && a !== API && a !== RPC);
   if (args.includes('--all')) {
     const [{ coins }, { ledger }] = await Promise.all([get('/api/coins'), get('/api/ledger')]);
     console.log(`${API}: ${coins.length} live coin(s), ${ledger.length} payout(s) on the ledger`);
@@ -115,7 +119,7 @@ async function main() {
     if (!coin) { console.log(`${fundraiser.campaign?.title || target}: no coin yet. When one is launched its creator will be this fundraiser's escrow wallet.`); return; }
     await checkCoin(coin, ledger);
   } else {
-    console.log('usage: node tools/verify.mjs --all | <mint | fundraiser-slug> | --mint <mint>   [--api url] [--rpc url]');
+    console.log(USAGE);
     process.exitCode = 2;
     return;
   }
