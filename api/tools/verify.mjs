@@ -2,14 +2,14 @@
 // Check Ape for Good's money path on-chain, independently of the site. Nothing is signed or sent.
 //
 //   node tools/verify.mjs --all                   every live coin and every published payout
-//   node tools/verify.mjs <mint | fundraiser-slug> one coin: its creator on the pump.fun curve, its escrow, its payouts
+//   node tools/verify.mjs <mint | fundraiser-slug> one coin: its creator on the pump.fun curve, its fee lock, its escrow, its payouts
 //   node tools/verify.mjs --mint <any pump mint>   just read who a pump.fun coin pays (no site record needed)
 //   node tools/verify.mjs --help                  print the usage line
 //
 // Options: --api <url> (default: the production API) · --rpc <url> (default: Solana's public mainnet RPC)
 // Exit code 0 when every check passes, 1 when any fails.
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { PUMP_SDK, OnlinePumpSdk, bondingCurvePda } from '@pump-fun/pump-sdk';
+import { PUMP_SDK, OnlinePumpSdk, bondingCurvePda, feeSharingConfigPda } from '@pump-fun/pump-sdk';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -33,6 +33,15 @@ async function get(p) {
 }
 
 /** Who a pump.fun coin pays: the creator stored on its bonding curve (set at launch, never changed). */
+/** A coin's pump.fun fee-sharing account, if it has one: who is paid, and whether the split can still change. */
+async function feeLock(mint) {
+  const address = feeSharingConfigPda(new PublicKey(mint));
+  const info = await conn.getAccountInfo(address, 'confirmed');
+  if (!info) return null;
+  const c = PUMP_SDK.decodeSharingConfig(info);
+  return { address: address.toBase58(), locked: Boolean(c.adminRevoked), shareholders: c.shareholders.map((h) => ({ wallet: h.address.toBase58(), bps: h.shareBps })) };
+}
+
 async function curveCreator(mint) {
   const info = await conn.getAccountInfo(bondingCurvePda(new PublicKey(mint)), 'confirmed');
   if (!info) return null;
@@ -74,11 +83,20 @@ async function checkCoin(coin, ledger) {
   console.log(`\n${coin.name} ($${coin.symbol}) · ${coin.mint}`);
   note(`fundraiser https://www.gofundme.com/f/${coin.slug} · ${coin.pumpUrl}`);
   const expect = coin.mode === 'open' ? coin.escrow && coin.escrow.address : coin.owner;
-  const curve = await curveCreator(coin.mint);
-  if (!curve) bad('no bonding curve on-chain for this mint');
+  const [curve, lock] = await Promise.all([curveCreator(coin.mint), feeLock(coin.mint)]);
+  const mine = ledger.filter((l) => l.slug === coin.slug);
+  if (lock) {
+    // claimed: pump.fun now pays the coin's fees to its fee-sharing account, which pays only the organizer
+    const paid = mine.length ? mine[0].wallet : null;
+    if (curve && curve.creator === lock.address) ok(`the coin's creator on-chain is its fee-sharing account ${lock.address}`);
+    else bad(`the coin has a fee-sharing account ${lock.address} but its creator on-chain is ${curve ? curve.creator : 'missing'}`);
+    if (lock.shareholders.length === 1 && lock.shareholders[0].bps === 10_000 && lock.shareholders[0].wallet === paid) ok(`100% of its fees go straight to the organizer's wallet ${paid}`);
+    else bad(`its fee split is ${lock.shareholders.map((h) => `${h.wallet} ${h.bps / 100}%`).join(', ')}, the ledger's organizer is ${paid || 'nobody yet'}`);
+    if (lock.locked) ok('the split is locked by pump.fun: nobody, the site included, can change it again');
+    else bad('the split is NOT locked: whoever holds its admin key could still change it');
+  } else if (!curve) bad('no bonding curve on-chain for this mint');
   else if (curve.creator === expect) ok(`the creator on-chain is ${coin.mode === 'open' ? "the fundraiser's escrow wallet" : "the organizer's own wallet"}: ${expect}${curve.complete ? ' (graduated; fees now come from the pool)' : ''}`);
   else bad(`the creator on-chain is ${curve.creator}, the site says ${expect}`);
-  const mine = ledger.filter((l) => l.slug === coin.slug);
   if (coin.mode === 'open' && expect) {
     const key = new PublicKey(expect);
     const [balance, owed] = await Promise.all([conn.getBalance(key, 'confirmed'), online.getCreatorVaultBalanceBothPrograms(key)]);

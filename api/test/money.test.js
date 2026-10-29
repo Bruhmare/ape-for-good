@@ -45,7 +45,8 @@ test('the escrow key is private to escrow.js: nothing else can sign with it', ()
   assert.deepEqual(outside, [], 'outside escrow.js the escrow key is only ever asked for its public address');
   const text = src('escrow.js');
   assert.equal((text.match(/\.sign\(\[kp\]\)/g) || []).length, 1, 'exactly one transaction is signed with an escrow key: the organizer sweep in prepareClaim');
-  assert.match(text, /sol\.transferIx\(kp\.publicKey, owner, total\)/, 'and that transaction moves the whole balance to the organizer');
+  assert.match(text, /sol\.transferIx\(escrow, owner, total\)/, 'and that transaction moves the whole balance to the organizer');
+  assert.match(text, /pump\.lockFeesTo\(\{ creator: escrow, mint: coin\.mint, owner,/, "and, on the first claim, hands the coin's fees to the organizer");
   assert.ok(!/escrowSeed\(\)/.test(src('server.js')), 'no route reads the seed');
   assert.ok(!/escrowKeypair|escrowSeed\(\)/.test(src('admin.js')), 'admin cannot derive a key');
 });
@@ -77,4 +78,21 @@ test('the ledger: pending sweeps stay private, finished ones are public with the
   assert.deepEqual(Object.keys(pub[0]).sort(), ['at', 'lamports', 'signature', 'slug', 'wallet'], 'the public entry: who, how much, which transaction, when');
   assert.equal(pub[0].wallet, ORGANIZER);
   fs.rmSync(CONFIG.dataDir, { recursive: true, force: true });
+});
+
+test("the first claim hands the coin's fees to the organizer on pump.fun, 100%, through pump.fun's fee program", async () => {
+  const pump = await import('../src/pump.js');
+  const { PublicKey } = await import('@solana/web3.js');
+  const escrowKey = new PublicKey(escrow.escrowAddress('wildfire-relief'));
+  const owner = new PublicKey(ORGANIZER);
+  const mint = new PublicKey('5xHP2xcXCuU3fWqUW3JptzAqxsDUFuBNkgBKwRxupump');
+  const [create, update] = await pump.lockFeesTo({ creator: escrowKey, mint, owner, graduated: false });
+  const FEES = 'pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ';
+  assert.equal(create.programId.toBase58(), FEES, "the fee-sharing account is created by pump.fun's fee program");
+  assert.equal(update.programId.toBase58(), FEES);
+  assert.ok(create.keys.some((k) => k.isSigner && k.pubkey.equals(escrowKey)), "the coin's creator (the escrow) signs and pays its rent");
+  assert.ok(update.keys.some((k) => k.isSigner && k.pubkey.equals(escrowKey)), 'and signs the one update that sets the split');
+  assert.ok(create.keys.some((k) => k.pubkey.equals(pump.sharingConfigAddress(mint))), "for this coin's own fee-sharing account");
+  const text = src('pump.js');
+  assert.match(text, /newShareholders: \[\{ address: owner, shareBps: 10_000 \}\]/, 'the organizer is the only shareholder, with all 10,000 bps');
 });

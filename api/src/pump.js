@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import BN from 'bn.js';
 import { PublicKey } from '@solana/web3.js';
-import { PUMP_SDK, OnlinePumpSdk, bondingCurvePda } from '@pump-fun/pump-sdk';
+import { PUMP_SDK, OnlinePumpSdk, bondingCurvePda, feeSharingConfigPda, canonicalPumpPoolPda } from '@pump-fun/pump-sdk';
 import { CONFIG } from './config.js';
 import * as sol from './sol.js';
 
@@ -49,6 +49,36 @@ export const creatorOwed = async (creator) => big(await online.getCreatorVaultBa
 
 /** The instructions that pay a creator what it is owed (empty when there is nothing to pay). */
 export const collectInstructions = (creator, feePayer) => online.collectCoinCreatorFeeInstructions(creator, feePayer);
+
+/* ------------------------------------------------------------ handing a coin's fees to its organizer */
+
+/** The coin's fee-sharing account on pump.fun: once it exists it is the coin's creator, and only its shareholders are paid. */
+export const sharingConfigAddress = (mint) => feeSharingConfigPda(new PublicKey(mint));
+
+/** The decoded fee-sharing account ({ version, admin, adminRevoked, shareholders }), or null while the coin has none. */
+export async function sharingConfig(mint) {
+  const info = await sol.connection.getAccountInfo(sharingConfigAddress(mint), sol.COMMITMENT);
+  return info ? PUMP_SDK.decodeSharingConfig(info) : null;
+}
+
+/**
+ * Point all of a coin's creator fees at `owner`, for good: create the coin's fee-sharing account (the creator signs and
+ * pays its rent) and make `owner` its only shareholder. pump.fun revokes the creator's authority on that first update
+ * (adminRevoked), so the split can never be changed again, by the creator or anyone else.
+ */
+export async function lockFeesTo({ creator, mint, owner, graduated }) {
+  mint = new PublicKey(mint);
+  return [
+    await PUMP_SDK.createFeeSharingConfig({ creator, mint, pool: graduated ? canonicalPumpPoolPda(mint) : null }),
+    await PUMP_SDK.updateFeeShares({ authority: creator, mint, currentShareholders: [creator], newShareholders: [{ address: owner, shareBps: 10_000 }] }),
+  ];
+}
+
+/** Pays a locked coin's accrued fees to its shareholders. Anyone may send it. */
+export async function distributeInstruction(mint, config) {
+  mint = new PublicKey(mint);
+  return PUMP_SDK.distributeCreatorFees({ mint, sharingConfig: config, sharingConfigAddress: sharingConfigAddress(mint) });
+}
 
 /** Decoded curves for many mints: [{ vSol, vTok, realSol, supply, complete, creator } | null]. */
 export async function curves(mints) {

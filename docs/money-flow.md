@@ -28,12 +28,16 @@ sequenceDiagram
   O->>S: POST /api/verify/check {slug, wallet}
   S->>S: codeIsInPage(story or title) → claim token (HMAC, 1 hour)
   O->>S: POST /api/escrow/prepare {wallet, claim}
-  S->>S: prepareClaim: collect the vault + transfer the whole balance to O, signed with the escrow key
+  S->>S: prepareClaim: collect the vault, lock the coin's fees to O on pump.fun (first claim), transfer the whole balance to O, signed with the escrow key
   S-->>O: the transaction (O signs and pays the network fee)
   O->>S: POST /api/escrow/submit {id, signed transaction}
   S->>P: broadcast, confirm
   S-->>O: signature
   Note over S: GET /api/ledger now lists the payout with its signature
+  loop every later trade
+    T->>P: buy / sell
+    P->>O: creator fee through the coin's fee-sharing account, 100% to O, split locked
+  end
 ```
 
 ## 1. A coin is launched with the escrow wallet as its creator
@@ -83,19 +87,33 @@ The only person who can edit a fundraiser's story is its organizer, so a code pl
    `verifiedClaim` checks it with a constant-time compare, against the stored claim, for that wallet, within
    `CLAIM_TTL_MINUTES` (60). The test `claim tokens` tries every tamper.
 
-## 5. The sweep
+## 5. The claim
 
-`prepareClaim(slug, owner)` in [`api/src/escrow.js`](../api/src/escrow.js) builds one transaction:
+`prepareClaim(slug, owner)` in [`api/src/escrow.js`](../api/src/escrow.js) builds one transaction
+(`claimInstructions`):
 
-1. `collectCoinCreatorFeeInstructions(escrow, owner)` — pump.fun pays the vault out to the escrow wallet; the
+1. On the first claim, `SystemProgram.transfer(owner → escrow, 0.01 SOL)`: the organizer lends the escrow the rent
+   for the fee-sharing account. Whatever the rent does not use comes back in step 5.
+2. `collectCoinCreatorFeeInstructions(escrow, owner)`: pump.fun pays the vault out to the escrow wallet; the
    organizer is the fee payer.
-2. `SystemProgram.transfer(escrow → owner, owed + balance)` — the whole balance, leaving nothing behind.
+3. On the first claim, `create_fee_sharing_config` (pump.fun's fee program, the escrow signs as the coin's
+   creator): the coin gets a fee-sharing account, and pump.fun makes that account the coin's creator.
+4. On the first claim, `update_fee_shares` with the organizer as the only shareholder at 10,000 bps. pump.fun pays
+   anything pending to the old shareholder first, then sets `adminRevoked`: the split can never be updated again.
+   After a claim, later claims instead send `distribute_creator_fees`, which pays what the coin has earned since
+   straight to the organizer (anyone may send it).
+5. `SystemProgram.transfer(escrow → owner, everything)`: the escrow's balance after steps 1 to 4, read from a
+   simulation, so nothing is left behind.
 
 It is simulated, the compute limit is pinned from the simulation, then it is signed with the escrow key and
 handed to the organizer, who signs it as payer. A ledger row is written with status `pending` and the exact
 message bytes **before** the transaction is returned. `submitClaim` refuses any signed transaction whose
 message is not byte-for-byte the one it prepared, broadcasts, waits for confirmation, and only then marks the
-row `done`. Below 0.001 SOL the claim is refused because it would cost more than it moves.
+row `done`. Once a coin is locked, a claim with nothing to collect is refused because it would cost more than it moves.
+
+This was checked against mainnet state: built for a live pump.fun coin and simulated, the transaction ran all
+eight instructions, emptied the escrow, and left a fee-sharing account naming the organizer at 100% with
+`adminRevoked: true`; a second `update_fee_shares` in the same simulation failed with `SharingConfigAdminRevoked`.
 
 ## 6. The ledger
 
