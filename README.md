@@ -8,7 +8,6 @@
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-cdf58a?labelColor=0d0f0e">
 </p>
 <p align="center">
-  <a href="https://charity-ruddy-mu.vercel.app">Website</a> ·
   <a href="https://charity-api-production-d1b7.up.railway.app/api/coins">Live coins</a> ·
   <a href="https://charity-api-production-d1b7.up.railway.app/api/ledger">Public ledger</a> ·
   <a href="docs/money-flow.md">The money path, step by step</a> ·
